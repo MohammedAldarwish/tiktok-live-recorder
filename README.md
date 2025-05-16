@@ -1,10 +1,11 @@
-<<<<<<< HEAD
 <div align="center">
 
 
 <h1> TikTok Live Recorder🎥</h1>
 
-<em>TikTok Live Recorder is a tool for recording live streaming tiktok.</em>
+<em><strong>🚀 This is a modified version of the original tool!</strong><br>
+Modifications include: the ability to record multiple live streams simultaneously, and sending a message from a Telegram bot when a stream ends, including the storage location of the recording.</em>
+
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54) [![Licence](https://img.shields.io/github/license/Ileriayo/markdown-badges?style=for-the-badge)](./LICENSE)
 
@@ -35,9 +36,11 @@ To clone and run this application, you'll need [Git](https://git-scm.com) and [P
 
 </div>
 
+**Note:** You must put the TikTok usernames (one per line) inside the `users.txt` file before running the app.
+
   ```bash
 # Clone this repository
-$ git clone https://github.com/Michele0303/tiktok-live-recorder
+$ git clone https://github.com/MohammedAldarwish/tiktok-live-recorder.git
 # Go into the repository
 $ cd tiktok-live-recorder
 # Go into the source code
@@ -45,9 +48,9 @@ $ cd src
 # Install dependencies
 $ pip install -r requirements.txt --break-system-packages
 # Run the app on windows
-$ python main.py -h
+$ python main.py -user users.txt
 # Run the app on linux
-$ python3 main.py -h
+$ python3 main.py -users.txt
   ```
 
 ## Install on Android 📱
@@ -104,5 +107,5 @@ $ python main.py -h
 
 This code is in no way affiliated with, authorized, maintained, sponsored or endorsed by TikTok or any of its affiliates or subsidiaries. Use at your own risk.
 =======
-# tiktok-live-recorder
->>>>>>> f69cfd47d9a47feef68df2931e4cd5d3e31afcec
+
+
