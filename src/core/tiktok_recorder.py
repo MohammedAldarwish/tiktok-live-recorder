@@ -27,6 +27,7 @@ class TikTokRecorder:
         output,
         duration,
         use_telegram,
+        stop_event=None,
     ):
         # Setup TikTok API client
         self.tiktok = TikTokAPI(proxy=proxy, cookies=cookies)
@@ -44,6 +45,9 @@ class TikTokRecorder:
 
         # Upload Settings
         self.use_telegram = use_telegram
+
+        self.stop_event = stop_event
+
 
         # Check if the user's country is blacklisted
         self.check_country_blacklisted()
@@ -69,7 +73,7 @@ class TikTokRecorder:
     def run(self):
         """
         runs the program in the selected mode. 
-        
+
         If the mode is MANUAL, it checks if the user is currently live and
         if so, starts recording.
         
@@ -92,7 +96,7 @@ class TikTokRecorder:
         self.start_recording()
 
     def automatic_mode(self):
-        while True:
+        while not self.stop_event or not self.stop_event.is_set():
             try:
                 self.room_id = self.tiktok.get_room_id_from_user(self.user)
                 self.manual_mode()
@@ -100,14 +104,25 @@ class TikTokRecorder:
             except UserLiveException as ex:
                 logger.info(ex)
                 logger.info(f"Waiting {self.automatic_interval} minutes before recheck\n")
-                time.sleep(self.automatic_interval * TimeOut.ONE_MINUTE)
+
+                for _ in range(int(self.automatic_interval * 60)):
+                    if self.stop_event and self.stop_event.is_set():
+                        logger.info("Stop event detected during wait. Exiting automatic mode.")
+                        return
+                    time.sleep(1)
 
             except ConnectionError:
                 logger.error(Error.CONNECTION_CLOSED_AUTOMATIC)
-                time.sleep(TimeOut.CONNECTION_CLOSED * TimeOut.ONE_MINUTE)
+                for _ in range(int(TimeOut.CONNECTION_CLOSED * 60)):
+                    if self.stop_event and self.stop_event.is_set():
+                        logger.info("Stop event detected during wait. Exiting automatic mode.")
+                        return
+                    time.sleep(1)
 
             except Exception as ex:
                 logger.error(f"Unexpected error: {ex}\n")
+
+        logger.info("Stop event detected. Exiting automatic mode.")
 
     def start_recording(self):
         """
@@ -121,69 +136,81 @@ class TikTokRecorder:
 
         if isinstance(self.output, str) and self.output != '':
             if not (self.output.endswith('/') or self.output.endswith('\\')):
-                if os.name == 'nt':
-                    self.output = self.output + "\\"
-                else:
-                    self.output = self.output + "/"
+                self.output += "\\" if os.name == 'nt' else "/"
 
         output = f"{self.output if self.output else ''}TK_{self.user}_{current_date}_flv.mp4"
 
-        if self.duration:
-            logger.info(f"Started recording for {self.duration} seconds ")
-        else:
-            logger.info("Started recording...")
+        output_dir = os.path.dirname(output)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
-        buffer_size = 512 * 1024 # 512 KB buffer
+        logger.info(f"Started recording for {self.duration} seconds " if self.duration else "Started recording...")
+        buffer_size = 512 * 1024  # 512 KB
         buffer = bytearray()
 
         logger.info("[PRESS CTRL + C ONCE TO STOP]")
-        with open(output, "wb") as out_file:
-            stop_recording = False
-            while not stop_recording:
-                try:
+
+        try:
+            with open(output, "wb") as out_file:
+                stop_recording = False
+                start_time = time.time()
+
+                while not stop_recording:
+                    # Check if user stopped manually
+                    if self.stop_event and self.stop_event.is_set():
+                        logger.info("Recording stopped by Ctrl+C.")
+                        break
+
+                    # Check if live ended
                     if not self.tiktok.is_room_alive(self.room_id):
                         logger.info("User is no longer live. Stopping recording.")
                         break
 
-                    start_time = time.time()
                     for chunk in self.tiktok.download_live_stream(live_url):
+                        if self.stop_event and self.stop_event.is_set():
+                            stop_recording = True
+                            break
+
                         buffer.extend(chunk)
                         if len(buffer) >= buffer_size:
                             out_file.write(buffer)
                             buffer.clear()
 
-                        elapsed_time = time.time() - start_time
-                        if self.duration and elapsed_time >= self.duration:
+                        if self.duration and (time.time() - start_time) >= self.duration:
                             stop_recording = True
                             break
 
-                except ConnectionError:
-                    if self.mode == Mode.AUTOMATIC:
-                        logger.error(Error.CONNECTION_CLOSED_AUTOMATIC)
-                        time.sleep(TimeOut.CONNECTION_CLOSED * TimeOut.ONE_MINUTE)
+                    time.sleep(0.1) 
 
-                except (RequestException, HTTPException):
-                    time.sleep(2)
+        except KeyboardInterrupt:
+            logger.info("KeyboardInterrupt received. Stopping recording.")
 
-                except KeyboardInterrupt:
-                    logger.info("Recording stopped by user.")
-                    stop_recording = True
+        except ConnectionError:
+            if self.mode == Mode.AUTOMATIC:
+                logger.error(Error.CONNECTION_CLOSED_AUTOMATIC)
+                time.sleep(TimeOut.CONNECTION_CLOSED * TimeOut.ONE_MINUTE)
 
-                except Exception as ex:
-                    logger.error(f"Unexpected error: {ex}\n")
-                    stop_recording = True
+        except (RequestException, HTTPException):
+            time.sleep(2)
 
-                finally:
+        except Exception as ex:
+            logger.error(f"Unexpected error: {ex}\n")
+
+        finally:
+            try:
+                with open(output, "ab") as out_file:
                     if buffer:
                         out_file.write(buffer)
-                        buffer.clear()
                     out_file.flush()
+            except Exception as e:
+                logger.error(f"Error while flushing buffer: {e}")
 
-        logger.info(f"Recording finished: {output}\n")
-        VideoManagement.convert_flv_to_mp4(output)
+            logger.info(f"Recording finished: {output}\n")
+            VideoManagement.convert_flv_to_mp4(output)
 
-        if self.use_telegram:
-            Telegram().upload(output.replace('_flv.mp4', '.mp4'))
+            if self.use_telegram:
+                Telegram().upload(output.replace('_flv.mp4', '.mp4'))
+
 
     def check_country_blacklisted(self):
         is_blacklisted = self.tiktok.is_country_blacklisted()
@@ -195,3 +222,12 @@ class TikTokRecorder:
 
         if self.mode == Mode.AUTOMATIC:
             raise TikTokException(TikTokError.COUNTRY_BLACKLISTED_AUTO_MODE)
+    
+
+    def check_live_status(self):
+        """
+        Check if the user is currently live without starting recording.
+        Raises UserLiveException if not live.
+        """
+        if not self.tiktok.is_room_alive(self.room_id):
+            raise UserLiveException(f"@{self.user} is not live.")
