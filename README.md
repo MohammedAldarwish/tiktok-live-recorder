@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <div align="center">
 
 
@@ -102,3 +103,6 @@ $ python main.py -h
 ## Legal ⚖️
 
 This code is in no way affiliated with, authorized, maintained, sponsored or endorsed by TikTok or any of its affiliates or subsidiaries. Use at your own risk.
+=======
+# tiktok-live-recorder
+>>>>>>> f69cfd47d9a47feef68df2931e4cd5d3e31afcec
